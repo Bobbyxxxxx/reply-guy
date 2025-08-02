@@ -1,78 +1,245 @@
-# Reply Guy Backend
+# Reply Guy - Twitter AI Reply Generator
 
-A Node.js/Express backend that generates casual replies to tweets using OpenAI's GPT API.
+A full-stack web application that processes Twitter links, extracts tweet content via Nitter, and generates AI-style replies using OpenAI.
 
 ## Features
 
-- Fetches tweet content from Nitter URLs
-- Generates casual replies using OpenAI GPT-3.5-turbo
-- Rate limiting with 1-second delays between requests
-- Error handling for failed requests
+- ✅ Process 50+ Twitter links at once
+- ✅ Extract tweet IDs from various URL formats (twitter.com, x.com, nitter.net)
+- ✅ Fetch tweet content using multiple Nitter instances
+- ✅ Generate context-aware AI replies using OpenAI GPT-3.5
+- ✅ Beautiful, responsive UI with loading states
+- ✅ Error handling and graceful failure recovery
+- ✅ Modular architecture for easy maintenance
+- ✅ Backend API with Express.js
+- ✅ Real AI integration with OpenAI
 
-## Local Development
+## Project Structure
 
-1. **Install dependencies**
+```
+reply-guy/
+├── index.html          # Frontend HTML file
+├── styles.css          # Frontend CSS styles
+├── server.js           # Backend Express server
+├── package.json        # Node.js dependencies
+├── env.example         # Environment variables template
+├── js/
+│   ├── apiClient.js    # API communication module
+│   ├── uiManager.js    # UI state management
+│   └── app.js          # Main frontend application
+└── README.md           # This file
+```
 
-   ```bash
-   npm install
-   ```
+## Quick Start
 
-2. **Set up environment variables**
-   Create a `.env` file in the project root:
+### 1. Backend Setup
 
-   ```
-   OPENAI_API_KEY=your_openai_api_key_here
-   ```
+```bash
+# Install dependencies
+npm install
 
-3. **Run the development server**
+# Create environment file
+cp env.example .env
 
-   ```bash
-   npm run dev
-   ```
+# Edit .env and add your OpenAI API key
+OPENAI_API_KEY=your_openai_api_key_here
 
-4. **Test the endpoint**
-   Send a POST request to `http://localhost:3000/generate-replies`:
-   ```json
-   {
-     "tweet_urls": ["https://nitter.net/username/status/1234567890"]
-   }
-   ```
+# Start the server
+npm start
+```
 
-## Render Deployment
+### 2. Frontend Setup
 
-1. **Connect your repository to Render**
+```bash
+# Open index.html in your browser
+# Or serve it with a local server:
+python -m http.server 8000
+# Then visit http://localhost:8000
+```
 
-   - Go to [render.com](https://render.com)
-   - Create a new Web Service
-   - Connect your GitHub repository
+## Backend API
 
-2. **Configure environment variables**
+### Server Endpoints
 
-   - In your Render dashboard, go to Environment
-   - Add `OPENAI_API_KEY` with your API key
+- `GET /` - Server status and info
+- `POST /scrape` - Process Twitter links and generate replies
 
-3. **Deploy**
-   - Render will automatically detect the Node.js app
-   - The `render.yaml` file provides the configuration
-   - Your app will be available at `https://your-app-name.onrender.com`
+### POST /scrape Request
 
-## API Endpoints
+```json
+{
+  "links": [
+    "https://twitter.com/username/status/1234567890",
+    "https://x.com/username/status/0987654321"
+  ]
+}
+```
 
-- `GET /` - Health check
-- `POST /generate-replies` - Generate replies for tweet URLs
-
-## Response Format
+### POST /scrape Response
 
 ```json
 [
   {
-    "tweet": "original tweet text",
-    "reply": "gpt-generated reply"
+    "url": "https://twitter.com/username/status/1234567890",
+    "tweet": "This is the original tweet text...",
+    "reply": "This is the AI-generated reply! 🤖"
   }
 ]
 ```
 
-## Requirements
+## Supported URL Formats
 
-- Node.js 18+
-- OpenAI API key
+The application supports various Twitter URL formats:
+
+- `https://twitter.com/username/status/1234567890`
+- `https://x.com/username/status/1234567890`
+- `https://nitter.net/username/status/1234567890`
+- `https://any-nitter-instance.com/username/status/1234567890`
+
+## AI Reply Features
+
+The OpenAI integration includes:
+
+- **Context-aware responses** based on tweet content
+- **Casual, human-like tone** with emojis and Gen Z slang
+- **Character limit compliance** (under 280 characters)
+- **Temperature control** for creative but coherent replies
+- **System prompts** for consistent personality
+
+## Technical Details
+
+### Backend Stack
+
+- **Express.js** - Web server framework
+- **CORS** - Cross-origin resource sharing
+- **node-fetch** - HTTP client for scraping
+- **cheerio** - HTML parsing and extraction
+- **OpenAI SDK** - AI reply generation
+- **dotenv** - Environment variable management
+
+### Frontend Stack
+
+- **Vanilla JavaScript** - No frameworks
+- **Modular architecture** - Clean separation of concerns
+- **Fetch API** - HTTP communication with backend
+- **Modern CSS** - Responsive design with gradients
+
+### Error Handling
+
+- **Multiple Nitter instances** - Fallback if one fails
+- **Rate limiting** - Respectful delays between requests
+- **Graceful degradation** - Continue processing if some tweets fail
+- **User feedback** - Clear error messages and status updates
+
+### Security Features
+
+- **CORS configuration** - Controlled cross-origin access
+- **Input validation** - Sanitized URL processing
+- **HTML escaping** - XSS prevention
+- **Environment variables** - Secure API key storage
+
+## Development
+
+### Backend Development
+
+```bash
+# Development mode with auto-restart
+npm run dev
+
+# Check server status
+curl http://localhost:3000/
+```
+
+### Frontend Development
+
+```bash
+# Test backend connection
+window.replyGuyApp.testBackendConnection()
+
+# Get current stats
+window.replyGuyApp.getStats()
+
+# Export results
+window.replyGuyApp.exportResults()
+```
+
+### Environment Variables
+
+Create a `.env` file with:
+
+```
+OPENAI_API_KEY=your_openai_api_key_here
+PORT=3000
+NODE_ENV=development
+```
+
+## API Configuration
+
+### OpenAI Setup
+
+1. Get your API key from [OpenAI Platform](https://platform.openai.com/api-keys)
+2. Add it to your `.env` file
+3. The server will use GPT-3.5-turbo for reply generation
+
+### Nitter Instances
+
+The backend tries multiple Nitter instances in order:
+
+1. `https://nitter.net`
+2. `https://nitter.it`
+3. `https://nitter.unixfox.eu`
+4. `https://nitter.privacydev.net`
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"Backend server not running"**
+
+   - Ensure `npm start` is running
+   - Check if port 3000 is available
+   - Verify `.env` file exists with API key
+
+2. **"Failed to scrape tweet"**
+
+   - Nitter instances might be down
+   - Try different Twitter URLs
+   - Check network connectivity
+
+3. **"OpenAI API error"**
+
+   - Verify API key is correct
+   - Check OpenAI account balance
+   - Ensure API key has proper permissions
+
+4. **CORS errors**
+   - Backend CORS is configured for localhost
+   - Check browser console for specific errors
+
+### Debug Commands
+
+```javascript
+// Check server status
+await window.replyGuyApp.apiClient.checkServerStatus();
+
+// Test with sample URLs
+const testUrls = ["https://twitter.com/username/status/1234567890"];
+await window.replyGuyApp.apiClient.processTweets(testUrls);
+```
+
+## Future Enhancements
+
+- [ ] User authentication and history
+- [ ] Custom reply templates
+- [ ] Batch processing with pause/resume
+- [ ] Export results to CSV/JSON
+- [ ] Multiple AI model support
+- [ ] Tweet media handling
+- [ ] Real-time processing status
+- [ ] Advanced error recovery
+- [ ] Rate limiting and caching
+- [ ] Docker containerization
+
+## License
+
+This project is open source and available under the MIT License.

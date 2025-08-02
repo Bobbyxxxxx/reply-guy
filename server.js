@@ -1,13 +1,15 @@
 const express = require("express");
-const axios = require("axios");
+const cors = require("cors");
+const fetch = require("node-fetch");
 const cheerio = require("cheerio");
 const OpenAI = require("openai");
 require("dotenv").config();
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = 3000;
 
-// Middleware to parse JSON
+// Middleware
+app.use(cors());
 app.use(express.json());
 
 // Initialize OpenAI
@@ -15,115 +17,231 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Helper function to delay execution
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * Extract tweet ID from various Twitter URL formats
+ * @param {string} url - Twitter URL
+ * @returns {string|null} Tweet ID or null if not found
+ */
+function extractTweetId(url) {
+  const patterns = [
+    /twitter\.com\/\w+\/status\/(\d+)/,
+    /x\.com\/\w+\/status\/(\d+)/,
+    /nitter\.net\/\w+\/status\/(\d+)/,
+    /status\/(\d+)/,
+  ];
 
-// Helper function to extract tweet text from HTML
-const extractTweetText = (html) => {
-  const $ = cheerio.load(html);
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) {
+      return match[1];
+    }
+  }
+  return null;
+}
 
-  // Try multiple selectors for tweet content
-  let tweetText = $(".tweet-content").text().trim();
+/**
+ * Scrape tweet content from Nitter
+ * @param {string} tweetId - Tweet ID
+ * @returns {Promise<string>} Tweet text content
+ */
+async function scrapeTweet(tweetId) {
+  const nitterInstances = [
+    "https://nitter.net",
+    "https://nitter.it",
+    "https://nitter.unixfox.eu",
+    "https://nitter.privacydev.net",
+  ];
 
-  if (!tweetText) {
-    tweetText = $(".main-tweet .tweet-content").text().trim();
+  for (const instance of nitterInstances) {
+    try {
+      const url = `${instance}/i/status/${tweetId}`;
+      console.log(`Trying to scrape from: ${url}`);
+
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        },
+        timeout: 10000,
+      });
+
+      if (!response.ok) {
+        console.log(`Failed to fetch from ${instance}: ${response.status}`);
+        continue;
+      }
+
+      const html = await response.text();
+      const $ = cheerio.load(html);
+
+      // Try multiple selectors to find tweet content
+      const selectors = [
+        ".main-tweet .tweet-content",
+        ".tweet-content",
+        ".tweet-text",
+        ".content",
+        '[class*="tweet"] [class*="content"]',
+        ".timeline-item .tweet-content",
+      ];
+
+      for (const selector of selectors) {
+        const element = $(selector);
+        if (element.length > 0) {
+          const text = element.text().trim();
+          if (text && text.length > 10) {
+            console.log(`Found tweet content using selector: ${selector}`);
+            return text;
+          }
+        }
+      }
+
+      // Fallback: look for any text that might be a tweet
+      const allText = $("body").text();
+      const lines = allText
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 20 && line.length < 500);
+
+      if (lines.length > 0) {
+        console.log("Using fallback text extraction");
+        return lines[0];
+      }
+    } catch (error) {
+      console.log(`Error scraping from ${instance}:`, error.message);
+      continue;
+    }
   }
 
-  if (!tweetText) {
-    tweetText = $('meta[property="og:description"]').attr("content") || "";
-  }
+  throw new Error("Could not scrape tweet from any Nitter instance");
+}
 
-  if (!tweetText) {
-    tweetText = $(".timeline-item .tweet-content").text().trim();
-  }
-
-  return tweetText || "[Could not parse tweet text]";
-};
-
-// POST endpoint to generate replies
-app.post("/generate-replies", async (req, res) => {
+/**
+ * Generate AI reply using OpenAI
+ * @param {string} tweetText - The tweet text
+ * @returns {Promise<string>} Generated reply
+ */
+async function generateReply(tweetText) {
   try {
-    const { tweet_urls } = req.body;
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a witty Twitter reply guy. Respond casually, like a human, sometimes with emojis or Gen Z slang. Keep replies under 280 characters and make them engaging and authentic. Don't be overly formal or robotic.",
+        },
+        {
+          role: "user",
+          content: `Tweet: ${tweetText}`,
+        },
+      ],
+      max_tokens: 150,
+      temperature: 0.8,
+    });
 
-    if (!tweet_urls || !Array.isArray(tweet_urls)) {
+    return completion.choices[0].message.content.trim();
+  } catch (error) {
+    console.error("OpenAI API error:", error);
+    throw new Error("Failed to generate reply");
+  }
+}
+
+/**
+ * Process a single tweet URL
+ * @param {string} url - Tweet URL
+ * @returns {Promise<Object>} Result object
+ */
+async function processTweet(url) {
+  try {
+    const tweetId = extractTweetId(url);
+    if (!tweetId) {
+      throw new Error("Invalid Twitter URL format");
+    }
+
+    console.log(`Processing tweet ID: ${tweetId}`);
+    const tweetText = await scrapeTweet(tweetId);
+    const reply = await generateReply(tweetText);
+
+    return {
+      url,
+      tweet: tweetText,
+      reply,
+    };
+  } catch (error) {
+    console.error(`Error processing ${url}:`, error.message);
+    return {
+      url,
+      tweet: `[Error: ${error.message}]`,
+      reply: "[Unable to generate reply due to error]",
+    };
+  }
+}
+
+// Routes
+app.get("/", (req, res) => {
+  res.json({
+    message: "Reply Guy API Server",
+    status: "running",
+    endpoints: {
+      scrape: "POST /scrape - Process Twitter links and generate replies",
+    },
+  });
+});
+
+app.post("/scrape", async (req, res) => {
+  try {
+    const { links } = req.body;
+
+    if (!links || !Array.isArray(links) || links.length === 0) {
       return res.status(400).json({
-        error: "tweet_urls array is required",
+        error: 'Invalid request. Expected "links" array with Twitter URLs.',
       });
     }
 
+    console.log(`Received ${links.length} links to process`);
+
+    // Process tweets sequentially to avoid rate limiting
     const results = [];
+    for (let i = 0; i < links.length; i++) {
+      const url = links[i];
+      console.log(`Processing ${i + 1}/${links.length}: ${url}`);
 
-    for (let i = 0; i < tweet_urls.length; i++) {
-      const url = tweet_urls[i];
-      let tweetText = "";
+      const result = await processTweet(url);
+      results.push(result);
 
-      try {
-        // Fetch the tweet page
-        const response = await axios.get(url, {
-          timeout: 10000,
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          },
-        });
-
-        // Extract tweet text
-        tweetText = extractTweetText(response.data);
-      } catch (error) {
-        console.error(`Error fetching ${url}:`, error.message);
-        tweetText = `[Error fetching tweet: ${error.message}]`;
-      }
-
-      // Generate reply using OpenAI
-      let reply = "";
-      try {
-        const completion = await openai.chat.completions.create({
-          model: "gpt-3.5-turbo",
-          messages: [
-            {
-              role: "user",
-              content: `Write a casual reply to this tweet: ${tweetText}`,
-            },
-          ],
-          max_tokens: 60,
-          temperature: 0.7,
-        });
-
-        reply = completion.choices[0].message.content.trim();
-      } catch (error) {
-        console.error("OpenAI API error:", error.message);
-        reply = `[Error from OpenAI: ${error.message}]`;
-      }
-
-      results.push({
-        tweet: tweetText,
-        reply: reply,
-      });
-
-      // Wait 1 second between requests (except for the last one)
-      if (i < tweet_urls.length - 1) {
-        await delay(1000);
+      // Add delay between requests to be respectful
+      if (i < links.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
 
+    console.log(`Completed processing ${results.length} tweets`);
     res.json(results);
   } catch (error) {
     console.error("Server error:", error);
     res.status(500).json({
       error: "Internal server error",
+      message: error.message,
     });
   }
 });
 
-// Health check endpoint
-app.get("/", (req, res) => {
-  res.json({
-    message: "Reply Guy Backend is running!",
-    endpoint: "POST /generate-replies",
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
+  res.status(500).json({
+    error: "Internal server error",
+    message: err.message,
   });
 });
 
+// Start server
 app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-  console.log("POST /generate-replies to generate tweet replies");
+  console.log(`🚀 Reply Guy API Server running on http://localhost:${port}`);
+  console.log(`📝 POST /scrape to process Twitter links`);
+
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn("⚠️  OPENAI_API_KEY not found in environment variables");
+  }
 });
+
+module.exports = app;

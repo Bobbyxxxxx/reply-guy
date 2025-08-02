@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reply Guy - Twitter AI Reply Generator</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🤖 Reply Guy</h1>
+        <p>Generate AI-style replies for your Twitter threads</p>
+      </div>
+
+      <div class="main-content">
+        <div class="input-section">
+          <div class="input-group">
+            <label for="twitterLinks"
+              >Paste your Twitter links here (one per line):</label
+            >
+            <textarea
+              id="twitterLinks"
+              placeholder="https://twitter.com/username/status/1234567890&#10;https://twitter.com/username/status/0987654321&#10;https://twitter.com/username/status/1122334455"
+            ></textarea>
+          </div>
+          <button class="button" id="processButton">🚀 Generate Replies</button>
+        </div>
+
+        <div class="loading" id="loading">
+          <div class="spinner"></div>
+          <div>Processing tweets...</div>
+          <div class="progress" id="progress"></div>
+        </div>
+
+        <div class="stats hidden" id="stats"></div>
+
+        <div class="results" id="results"></div>
+      </div>
+    </div>
+
+    <!-- Load JavaScript modules -->
+    <script src="js/apiClient.js"></script>
+    <script src="js/uiManager.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>
